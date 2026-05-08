@@ -26,7 +26,7 @@ export function SocketProvider({ children }) {
     const token = localStorage.getItem('spark_token')
     if (!token) return
 
-    const s = io({ auth: { token }, path: '/socket.io' })
+    const s = io(import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:3001', { auth: { token }, path: '/socket.io' })
     socketRef.current = s
     setSocket(s)
 
