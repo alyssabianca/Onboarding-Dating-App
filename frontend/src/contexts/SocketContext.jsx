@@ -26,27 +26,42 @@ export function SocketProvider({ children }) {
     const token = localStorage.getItem('spark_token')
     if (!token) return
 
-    const s = io({ auth: { token }, path: '/socket.io' })
-    socketRef.current = s
-    setSocket(s)
+    let cancelled = false
 
-    s.on('match_notification', ({ matchedUserName, matchId }) => {
-      setNotification({ type: 'match', name: matchedUserName, matchId })
-      showNotification('🔥 New Match!', `You and ${matchedUserName} liked each other!`)
-    })
+    const connect = (url) => {
+      if (cancelled) return
+      const s = url
+        ? io(url, { auth: { token }, path: '/socket.io' })
+        : io({ auth: { token }, path: '/socket.io' })
+      socketRef.current = s
+      setSocket(s)
 
-    s.on('message_notification', ({ matchId, message, senderName }) => {
-      const onChat = window.location.pathname === `/chat/${matchId}`
-      if (!onChat || document.hidden) {
-        setNotification({ type: 'message', senderName, content: message.content, matchId })
-        showNotification(`💬 ${senderName}`, message.content)
-      }
-    })
+      s.on('match_notification', ({ matchedUserName, matchId }) => {
+        setNotification({ type: 'match', name: matchedUserName, matchId })
+        showNotification('🔥 New Match!', `You and ${matchedUserName} liked each other!`)
+      })
+
+      s.on('message_notification', ({ matchId, message, senderName }) => {
+        const onChat = window.location.pathname === `/chat/${matchId}`
+        if (!onChat || document.hidden) {
+          setNotification({ type: 'message', senderName, content: message.content, matchId })
+          showNotification(`💬 ${senderName}`, message.content)
+        }
+      })
+    }
+
+    fetch('/api/socket-url')
+      .then(res => res.json())
+      .then(({ url }) => connect(url))
+      .catch(() => connect(null))
 
     return () => {
-      s.disconnect()
-      socketRef.current = null
-      setSocket(null)
+      cancelled = true
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+        socketRef.current = null
+        setSocket(null)
+      }
     }
   }, [user])
 

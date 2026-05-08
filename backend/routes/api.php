@@ -8,6 +8,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('health', fn () => response()->json(['status' => 'ok']));
+Route::get('socket-url', fn () => response()->json(['url' => env('SOCKET_SERVER_URL', '')]));
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);

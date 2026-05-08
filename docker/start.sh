@@ -11,7 +11,7 @@ chown -R www-data:www-data storage bootstrap/cache
 chmod -R 775 storage bootstrap/cache
 
 # Render nginx config — substitutes ${PORT} and ${SOCKET_SERVER_URL}
-envsubst '${PORT} ${SOCKET_SERVER_URL}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Laravel production optimizations
 php artisan config:cache
