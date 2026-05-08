@@ -1,0 +1,13 @@
+.git
+.claude
+*.md
+docker
+backend/vendor
+backend/node_modules
+backend/.env
+backend/.env.local
+backend/.env.production
+frontend/node_modules
+frontend/dist
+socket-server/node_modules
+socket-server/.env
