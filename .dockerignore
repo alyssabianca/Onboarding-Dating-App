@@ -1,7 +1,6 @@
 .git
 .claude
 *.md
-docker
 backend/vendor
 backend/node_modules
 backend/.env
