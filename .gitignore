@@ -8,6 +8,9 @@ backend/bootstrap/cache/
 
 # Frontend
 frontend/node_modules/
+
+# Socket server
+socket-server/node_modules/
 frontend/dist/
 frontend/.env.local
 

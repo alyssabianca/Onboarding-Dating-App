@@ -53,7 +53,7 @@ export default function LandingPage() {
               Welcome to Spark
             </span>
           </div>
-          <h1 className="text-5xl sm:text-6xl font-extrabold mb-6 leading-tight">
+          <h1 className="text-5xl sm:text-6xl font-extrabold mb-6 leading-tight text-gray-900 dark:text-white">
             Find Your{' '}
             <span className="text-gradient-brand">Spark</span>
           </h1>

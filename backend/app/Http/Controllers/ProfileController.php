@@ -24,8 +24,6 @@ class ProfileController extends Controller
             'bio'             => 'nullable|string|max:500',
             'age'             => 'sometimes|integer|min:18|max:100',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
-            'latitude'        => 'nullable|numeric|between:-90,90',
-            'longitude'       => 'nullable|numeric|between:-180,180',
         ]);
 
         if ($request->hasFile('profile_picture')) {

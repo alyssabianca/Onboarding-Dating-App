@@ -4,7 +4,12 @@
       "Bash(php artisan *)",
       "Bash(curl -s http://localhost:8000/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"alice@example.com\",\"password\":\"password\"}')",
       "Bash(python -m json.tool)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(npm install *)",
+      "Bash(node index.js)",
+      "Bash(npm run *)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

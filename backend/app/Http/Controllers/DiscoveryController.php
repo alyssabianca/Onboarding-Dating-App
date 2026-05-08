@@ -12,9 +12,8 @@ class DiscoveryController extends Controller
     public function index(Request $request)
     {
         $request->validate([
-            'age_min'  => 'nullable|integer|min:18|max:100',
-            'age_max'  => 'nullable|integer|min:18|max:100',
-            'distance' => 'nullable|numeric|min:1',
+            'age_min' => 'nullable|integer|min:18|max:100',
+            'age_max' => 'nullable|integer|min:18|max:100',
         ]);
 
         $me = $request->user();
@@ -31,14 +30,7 @@ class DiscoveryController extends Controller
             $query->where('age', '<=', $request->age_max);
         }
 
-        $profiles = $query->limit(20)->get()->map(fn($u) => $this->formatUser($u, $me));
-
-        if ($request->filled('distance') && $me->latitude && $me->longitude) {
-            $maxKm = (float) $request->distance;
-            $profiles = $profiles->filter(function ($u) use ($maxKm) {
-                return isset($u['distance_km']) && $u['distance_km'] <= $maxKm;
-            })->values();
-        }
+        $profiles = $query->limit(20)->get()->map(fn($u) => $this->formatUser($u));
 
         return response()->json(['profiles' => $profiles]);
     }
@@ -92,35 +84,14 @@ class DiscoveryController extends Controller
         ]);
     }
 
-    private function formatUser(User $user, User $me): array
+    private function formatUser(User $user): array
     {
-        $distance = null;
-        if ($me->latitude && $me->longitude && $user->latitude && $user->longitude) {
-            $distance = round($this->haversine(
-                (float) $me->latitude,
-                (float) $me->longitude,
-                (float) $user->latitude,
-                (float) $user->longitude
-            ), 1);
-        }
-
         return [
             'id'                  => $user->id,
             'name'                => $user->name,
             'age'                 => $user->age,
             'bio'                 => $user->bio,
             'profile_picture_url' => $user->profile_picture ? asset('storage/' . $user->profile_picture) : null,
-            'distance_km'         => $distance,
         ];
-    }
-
-    private function haversine(float $lat1, float $lon1, float $lat2, float $lon2): float
-    {
-        $R   = 6371;
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLon = deg2rad($lon2 - $lon1);
-        $a   = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
-
-        return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }

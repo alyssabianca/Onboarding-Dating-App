@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'
 import { X, Heart, SlidersHorizontal, RefreshCw } from 'lucide-react'
 import api from '../lib/api'
+import { useAuth } from '../contexts/AuthContext'
+import { useSocket } from '../contexts/SocketContext'
 import NotificationBanner from '../components/NotificationBanner'
 
 function ProfileCard({ profile, onSwipe, isTop }) {
@@ -92,18 +94,25 @@ function ProfileCard({ profile, onSwipe, isTop }) {
 }
 
 export default function DiscoverPage() {
+  const { user } = useAuth()
+  const { socket } = useSocket()
+
   const [profiles, setProfiles] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [swiping, setSwiping] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({ age_min: 18, age_max: 60, distance: 50 })
+  const [filters, setFilters] = useState({ age_min: 18, age_max: 60 })
   const [matchNotif, setMatchNotif] = useState(null)
 
   const fetchProfiles = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await api.get('/discovery', { params: filters })
+      const params = {
+        age_min: filters.age_min,
+        age_max: filters.age_max,
+      }
+      const res = await api.get('/discovery', { params })
       setProfiles(res.data.profiles ?? res.data ?? [])
       setCurrentIndex(0)
     } catch {
@@ -122,14 +131,22 @@ export default function DiscoverPage() {
     const profile = profiles[currentIndex]
     if (!profile) return
 
+    const apiDirection = direction === 'right' ? 'like' : 'skip'
+
     setSwiping(true)
     try {
       const res = await api.post('/swipes', {
         user_id: profile.id,
-        direction,
+        direction: apiDirection,
       })
       if (res.data?.matched) {
         setMatchNotif({ name: profile.name, matchId: res.data.match_id })
+        // Notify the other user in real-time
+        socket?.emit('notify_match', {
+          targetUserId: profile.id,
+          matchId: res.data.match_id,
+          matchedUserName: user.name,
+        })
       }
     } catch {
       // ignore swipe errors
@@ -209,21 +226,6 @@ export default function DiscoverPage() {
                       setFilters((f) => ({ ...f, age_max: Number(e.target.value) }))
                     }
                     className="w-full accent-[#e94057]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Distance (km)
-                  </label>
-                  <input
-                    type="number"
-                    value={filters.distance}
-                    onChange={(e) =>
-                      setFilters((f) => ({ ...f, distance: Number(e.target.value) }))
-                    }
-                    min={1}
-                    max={500}
-                    className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#e94057] text-sm"
                   />
                 </div>
                 <button

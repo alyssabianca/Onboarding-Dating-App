@@ -1,7 +1,11 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { SocketProvider, useSocket } from './contexts/SocketContext'
+import { requestNotificationPermission } from './lib/notifications'
 import Navbar from './components/Navbar'
+import GlobalToast from './components/GlobalToast'
 
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
@@ -38,9 +42,16 @@ function GuestRoute({ children }) {
 }
 
 function AppRoutes() {
+  const { notification, clearNotification } = useSocket()
+
+  useEffect(() => {
+    requestNotificationPermission()
+  }, [])
+
   return (
     <>
       <Navbar />
+      <GlobalToast notification={notification} onDismiss={clearNotification} />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route
@@ -102,7 +113,9 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <AppRoutes />
+          <SocketProvider>
+            <AppRoutes />
+          </SocketProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

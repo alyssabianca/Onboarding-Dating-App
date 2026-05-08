@@ -4,6 +4,7 @@ import { ArrowLeft, Send } from 'lucide-react'
 import { motion } from 'framer-motion'
 import api from '../lib/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useSocket } from '../contexts/SocketContext'
 
 function formatTime(dateStr) {
   if (!dateStr) return ''
@@ -16,9 +17,11 @@ function formatTime(dateStr) {
   if (isToday) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+  return (
+    d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
     ' ' +
     d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  )
 }
 
 function MessageBubble({ message, isOwn }) {
@@ -38,9 +41,7 @@ function MessageBubble({ message, isOwn }) {
           {message.content}
         </div>
         {showTime && (
-          <p
-            className={`text-xs text-gray-400 mt-1 ${isOwn ? 'text-right' : 'text-left'}`}
-          >
+          <p className={`text-xs text-gray-400 mt-1 ${isOwn ? 'text-right' : 'text-left'}`}>
             {formatTime(message.created_at)}
           </p>
         )}
@@ -54,73 +55,61 @@ export default function ChatPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
+  const { socket } = useSocket()
+
   const [match, setMatch] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+
   const bottomRef = useRef(null)
-  const pollRef = useRef(null)
-  const lastIdRef = useRef(null)
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
-  const fetchMessages = useCallback(
-    async (initial = false) => {
-      try {
-        const res = await api.get(`/matches/${matchId}/messages`)
-        const fetched = res.data.messages ?? res.data ?? []
-
-        if (initial) {
-          setMessages(fetched)
-          if (fetched.length) lastIdRef.current = fetched[fetched.length - 1].id
-        } else {
-          // Append only new messages
-          if (fetched.length && fetched[fetched.length - 1].id !== lastIdRef.current) {
-            setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id))
-              const newOnes = fetched.filter((m) => !existingIds.has(m.id))
-              if (newOnes.length === 0) return prev
-              lastIdRef.current = fetched[fetched.length - 1].id
-              return [...prev, ...newOnes]
-            })
-          }
-        }
-      } catch {
-        // ignore polling errors
-      }
-    },
-    [matchId]
-  )
-
-  // Initial load
+  // Load match info + message history
   useEffect(() => {
     const load = async () => {
       try {
-        const [matchRes] = await Promise.all([
+        const [matchRes, msgRes] = await Promise.all([
           api.get(`/matches/${matchId}`),
-          fetchMessages(true),
+          api.get(`/matches/${matchId}/messages`),
         ])
         setMatch(matchRes.data.match ?? matchRes.data)
-
+        setMessages(msgRes.data.messages ?? [])
       } catch {
-        // ignore
+        // ignore load errors
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [matchId, fetchMessages])
+  }, [matchId])
 
-  // Polling every 3 seconds
+  // Join the match room on the global socket and listen for incoming messages
   useEffect(() => {
-    pollRef.current = setInterval(() => fetchMessages(false), 3000)
-    return () => clearInterval(pollRef.current)
-  }, [fetchMessages])
+    if (!socket) return
 
-  // Auto-scroll on new messages
+    socket.emit('join_match', matchId)
+
+    const handleNewMessage = (message) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        return [...prev, message]
+      })
+    }
+
+    socket.on('new_message', handleNewMessage)
+
+    return () => {
+      socket.emit('leave_match', matchId)
+      socket.off('new_message', handleNewMessage)
+    }
+  }, [socket, matchId])
+
+  // Auto-scroll whenever messages change
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
@@ -131,8 +120,11 @@ export default function ChatPage() {
     if (!content || sending) return
 
     setSending(true)
+
+    // Optimistic bubble
+    const optimisticId = `opt-${Date.now()}`
     const optimistic = {
-      id: `opt-${Date.now()}`,
+      id: optimisticId,
       content,
       sender_id: user?.id,
       created_at: new Date().toISOString(),
@@ -141,15 +133,22 @@ export default function ChatPage() {
     setInput('')
 
     try {
+      // 1. Persist via Laravel API
       const res = await api.post(`/matches/${matchId}/messages`, { content })
       const saved = res.data.message ?? res.data
-      setMessages((prev) =>
-        prev.map((m) => (m.id === optimistic.id ? saved : m))
-      )
-      lastIdRef.current = saved.id
+
+      // 2. Replace optimistic with the saved message (has real id)
+      setMessages((prev) => prev.map((m) => (m.id === optimisticId ? saved : m)))
+
+      // 3. Broadcast to the other person via Socket.io
+      socket?.emit('send_message', {
+        matchId,
+        message: saved,
+        recipientUserId: partner?.id,
+      })
     } catch {
-      // Remove optimistic on failure
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+      // Roll back optimistic on failure
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
       setInput(content)
     } finally {
       setSending(false)
@@ -191,7 +190,9 @@ export default function ChatPage() {
                 {partner?.name}
                 {partner?.age ? `, ${partner.age}` : ''}
               </p>
-              <p className="text-xs text-green-500">Active now</p>
+              <p className={`text-xs ${socket?.connected ? 'text-green-500' : 'text-gray-400'}`}>
+                {socket?.connected ? 'Online' : 'Connecting...'}
+              </p>
             </div>
           </>
         )}
@@ -214,17 +215,13 @@ export default function ChatPage() {
           </div>
         ) : (
           <div className="max-w-2xl mx-auto">
-            {messages.map((msg, i) => (
+            {messages.map((msg) => (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i < 20 ? 0 : 0 }}
               >
-                <MessageBubble
-                  message={msg}
-                  isOwn={msg.sender_id === user?.id}
-                />
+                <MessageBubble message={msg} isOwn={msg.sender_id === user?.id} />
               </motion.div>
             ))}
             <div ref={bottomRef} />
@@ -232,12 +229,9 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Input area */}
+      {/* Input */}
       <div className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-4 py-3">
-        <form
-          onSubmit={handleSend}
-          className="flex items-center gap-3 max-w-2xl mx-auto"
-        >
+        <form onSubmit={handleSend} className="flex items-center gap-3 max-w-2xl mx-auto">
           <input
             type="text"
             value={input}
